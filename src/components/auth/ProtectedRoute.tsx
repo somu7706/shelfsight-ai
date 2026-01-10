@@ -5,22 +5,22 @@ import { Loader2 } from "lucide-react";
 
 interface ProtectedRouteProps {
   children: ReactNode;
-  requireOwner?: boolean;
+  requireShop?: boolean;
 }
 
-export function ProtectedRoute({ children, requireOwner = false }: ProtectedRouteProps) {
-  const { user, loading, isShopOwner } = useAuth();
+export function ProtectedRoute({ children, requireShop = true }: ProtectedRouteProps) {
+  const { user, loading, hasShop } = useAuth();
   const navigate = useNavigate();
 
   useEffect(() => {
     if (!loading) {
       if (!user) {
         navigate("/auth");
-      } else if (requireOwner && !isShopOwner) {
-        navigate("/");
+      } else if (requireShop && !hasShop) {
+        navigate("/shop-setup");
       }
     }
-  }, [user, loading, isShopOwner, requireOwner, navigate]);
+  }, [user, loading, hasShop, requireShop, navigate]);
 
   if (loading) {
     return (
@@ -37,7 +37,7 @@ export function ProtectedRoute({ children, requireOwner = false }: ProtectedRout
     return null;
   }
 
-  if (requireOwner && !isShopOwner) {
+  if (requireShop && !hasShop) {
     return null;
   }
 
