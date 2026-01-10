@@ -1,15 +1,16 @@
-import { useState, useRef, useEffect, useCallback } from "react";
-import * as tf from "@tensorflow/tfjs";
-import * as cocoSsd from "@tensorflow-models/coco-ssd";
+import { useState, useRef, useCallback } from "react";
+import { pipeline, env } from "@huggingface/transformers";
 import { Camera, Upload, Loader2, RefreshCw, AlertCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 
+// Configure transformers.js to not use local models
+env.allowLocalModels = false;
+
 interface Detection {
-  class: string;
+  label: string;
   score: number;
-  bbox: [number, number, number, number];
 }
 
 interface TensorFlowVisionProps {
@@ -17,44 +18,54 @@ interface TensorFlowVisionProps {
 }
 
 export function TensorFlowVision({ onDetection }: TensorFlowVisionProps) {
-  const [model, setModel] = useState<cocoSsd.ObjectDetection | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
+  const [classifier, setClassifier] = useState<any>(null);
+  const [isLoading, setIsLoading] = useState(false);
+  const [isModelLoaded, setIsModelLoaded] = useState(false);
   const [isStreaming, setIsStreaming] = useState(false);
   const [detections, setDetections] = useState<Detection[]>([]);
   const [error, setError] = useState<string | null>(null);
-  
+  const [capturedImage, setCapturedImage] = useState<string | null>(null);
+
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
-  const animationRef = useRef<number | null>(null);
 
-  // Load TensorFlow.js model
-  useEffect(() => {
-    const loadModel = async () => {
+  const loadModel = async () => {
+    try {
+      setIsLoading(true);
+      setError(null);
+      
+      const imageClassifier = await pipeline(
+        "image-classification",
+        "onnx-community/mobilenetv4_conv_small.e2400_r224_in1k",
+        { device: "webgpu" }
+      );
+      
+      setClassifier(imageClassifier);
+      setIsModelLoaded(true);
+    } catch (err) {
+      console.error("Error loading model:", err);
+      // Fallback to CPU if WebGPU not available
       try {
-        setIsLoading(true);
-        await tf.ready();
-        const loadedModel = await cocoSsd.load({
-          base: "lite_mobilenet_v2",
-        });
-        setModel(loadedModel);
-        setError(null);
-      } catch (err) {
-        console.error("Error loading model:", err);
+        const imageClassifier = await pipeline(
+          "image-classification",
+          "onnx-community/mobilenetv4_conv_small.e2400_r224_in1k"
+        );
+        setClassifier(imageClassifier);
+        setIsModelLoaded(true);
+      } catch (fallbackErr) {
         setError("Failed to load AI model. Please refresh the page.");
-      } finally {
-        setIsLoading(false);
       }
-    };
-
-    loadModel();
-
-    return () => {
-      stopCamera();
-    };
-  }, []);
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   const startCamera = async () => {
+    if (!isModelLoaded) {
+      await loadModel();
+    }
+
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
         video: {
@@ -69,10 +80,7 @@ export function TensorFlowVision({ onDetection }: TensorFlowVisionProps) {
         streamRef.current = stream;
         setIsStreaming(true);
         setError(null);
-
-        videoRef.current.onloadeddata = () => {
-          detectObjects();
-        };
+        setCapturedImage(null);
       }
     } catch (err) {
       console.error("Error accessing camera:", err);
@@ -81,11 +89,6 @@ export function TensorFlowVision({ onDetection }: TensorFlowVisionProps) {
   };
 
   const stopCamera = () => {
-    if (animationRef.current) {
-      cancelAnimationFrame(animationRef.current);
-      animationRef.current = null;
-    }
-
     if (streamRef.current) {
       streamRef.current.getTracks().forEach((track) => track.stop());
       streamRef.current = null;
@@ -96,138 +99,114 @@ export function TensorFlowVision({ onDetection }: TensorFlowVisionProps) {
     }
 
     setIsStreaming(false);
-    setDetections([]);
   };
 
-  const detectObjects = useCallback(async () => {
-    if (!model || !videoRef.current || !canvasRef.current) return;
+  const captureAndClassify = useCallback(async () => {
+    if (!classifier || !videoRef.current || !canvasRef.current) return;
 
     const video = videoRef.current;
     const canvas = canvasRef.current;
     const ctx = canvas.getContext("2d");
 
-    if (!ctx || video.readyState !== 4) {
-      animationRef.current = requestAnimationFrame(detectObjects);
-      return;
-    }
+    if (!ctx || video.readyState !== 4) return;
 
-    // Set canvas size to match video
+    // Set canvas size and capture frame
     canvas.width = video.videoWidth;
     canvas.height = video.videoHeight;
+    ctx.drawImage(video, 0, 0);
 
-    // Run detection
-    const predictions = await model.detect(video);
+    // Get image data URL
+    const imageDataUrl = canvas.toDataURL("image/jpeg");
+    setCapturedImage(imageDataUrl);
 
-    // Clear canvas and draw video frame
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-
-    // Draw bounding boxes
-    predictions.forEach((prediction) => {
-      const [x, y, width, height] = prediction.bbox;
-
-      // Draw box
-      ctx.strokeStyle = "#22c55e";
-      ctx.lineWidth = 3;
-      ctx.strokeRect(x, y, width, height);
-
-      // Draw label background
-      const label = `${prediction.class} ${Math.round(prediction.score * 100)}%`;
-      ctx.font = "bold 14px Inter";
-      const textWidth = ctx.measureText(label).width;
+    try {
+      setIsLoading(true);
+      const results = await classifier(imageDataUrl);
       
-      ctx.fillStyle = "#22c55e";
-      ctx.fillRect(x, y - 24, textWidth + 12, 24);
-
-      // Draw label text
-      ctx.fillStyle = "#ffffff";
-      ctx.fillText(label, x + 6, y - 7);
-    });
-
-    // Update state with detections
-    const newDetections = predictions.map((p) => ({
-      class: p.class,
-      score: p.score,
-      bbox: p.bbox as [number, number, number, number],
-    }));
-
-    setDetections(newDetections);
-    onDetection?.(newDetections);
-
-    // Continue detection loop
-    animationRef.current = requestAnimationFrame(detectObjects);
-  }, [model, onDetection]);
-
-  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file || !model || !canvasRef.current) return;
-
-    const img = new Image();
-    img.onload = async () => {
-      const canvas = canvasRef.current!;
-      const ctx = canvas.getContext("2d")!;
-
-      canvas.width = img.width;
-      canvas.height = img.height;
-      ctx.drawImage(img, 0, 0);
-
-      const predictions = await model.detect(canvas);
-
-      // Draw bounding boxes
-      predictions.forEach((prediction) => {
-        const [x, y, width, height] = prediction.bbox;
-
-        ctx.strokeStyle = "#22c55e";
-        ctx.lineWidth = 3;
-        ctx.strokeRect(x, y, width, height);
-
-        const label = `${prediction.class} ${Math.round(prediction.score * 100)}%`;
-        ctx.font = "bold 14px Inter";
-        const textWidth = ctx.measureText(label).width;
-
-        ctx.fillStyle = "#22c55e";
-        ctx.fillRect(x, y - 24, textWidth + 12, 24);
-
-        ctx.fillStyle = "#ffffff";
-        ctx.fillText(label, x + 6, y - 7);
-      });
-
-      const newDetections = predictions.map((p) => ({
-        class: p.class,
-        score: p.score,
-        bbox: p.bbox as [number, number, number, number],
+      const newDetections = results.slice(0, 5).map((r: any) => ({
+        label: r.label,
+        score: r.score,
       }));
 
       setDetections(newDetections);
       onDetection?.(newDetections);
-    };
+    } catch (err) {
+      console.error("Classification error:", err);
+    } finally {
+      setIsLoading(false);
+    }
+  }, [classifier, onDetection]);
 
-    img.src = URL.createObjectURL(file);
+  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (!isModelLoaded) {
+      await loadModel();
+    }
+
+    const reader = new FileReader();
+    reader.onload = async (event) => {
+      const imageDataUrl = event.target?.result as string;
+      setCapturedImage(imageDataUrl);
+
+      if (classifier) {
+        try {
+          setIsLoading(true);
+          const results = await classifier(imageDataUrl);
+          
+          const newDetections = results.slice(0, 5).map((r: any) => ({
+            label: r.label,
+            score: r.score,
+          }));
+
+          setDetections(newDetections);
+          onDetection?.(newDetections);
+        } catch (err) {
+          console.error("Classification error:", err);
+        } finally {
+          setIsLoading(false);
+        }
+      }
+    };
+    reader.readAsDataURL(file);
   };
 
   return (
     <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
       {/* Camera/Canvas View */}
-      <div className="vision-scanner aspect-video relative">
+      <div className="vision-scanner aspect-video relative overflow-hidden rounded-2xl">
         <video
           ref={videoRef}
           autoPlay
           playsInline
           muted
-          className={cn("absolute inset-0 w-full h-full object-cover", !isStreaming && "hidden")}
+          className={cn(
+            "absolute inset-0 w-full h-full object-cover",
+            (!isStreaming || capturedImage) && "hidden"
+          )}
         />
-        <canvas
-          ref={canvasRef}
-          className="absolute inset-0 w-full h-full object-contain"
-        />
+        <canvas ref={canvasRef} className="hidden" />
+
+        {capturedImage && (
+          <img
+            src={capturedImage}
+            alt="Captured"
+            className="absolute inset-0 w-full h-full object-contain bg-sidebar"
+          />
+        )}
 
         {/* Loading State */}
         {isLoading && (
-          <div className="absolute inset-0 flex items-center justify-center bg-sidebar/90">
+          <div className="absolute inset-0 flex items-center justify-center bg-sidebar/90 z-10">
             <div className="text-center">
               <Loader2 className="h-12 w-12 text-primary animate-spin mx-auto mb-4" />
-              <p className="text-sidebar-foreground font-medium">Loading TensorFlow.js...</p>
-              <p className="text-sidebar-foreground/60 text-sm">Initializing AI model</p>
+              <p className="text-sidebar-foreground font-medium">
+                {isModelLoaded ? "Analyzing image..." : "Loading AI model..."}
+              </p>
+              <p className="text-sidebar-foreground/60 text-sm">
+                {isModelLoaded ? "Running classification" : "This may take a moment"}
+              </p>
             </div>
           </div>
         )}
@@ -244,35 +223,45 @@ export function TensorFlowVision({ onDetection }: TensorFlowVisionProps) {
         )}
 
         {/* Idle State */}
-        {!isLoading && !isStreaming && !error && detections.length === 0 && (
+        {!isLoading && !isStreaming && !error && !capturedImage && (
           <div className="absolute inset-0 flex items-center justify-center bg-sidebar/90">
             <div className="text-center">
               <Camera className="h-16 w-16 text-sidebar-foreground/40 mx-auto mb-4" />
               <p className="text-sidebar-foreground/60 text-sm">
-                Start camera or upload an image to detect products
+                Start camera or upload an image to classify
               </p>
             </div>
           </div>
         )}
 
         {/* Control Buttons */}
-        <div className="absolute bottom-4 left-4 right-4 flex gap-3">
+        <div className="absolute bottom-4 left-4 right-4 flex gap-3 z-20">
           {isStreaming ? (
-            <Button
-              onClick={stopCamera}
-              className="flex-1 bg-danger hover:bg-danger/90 text-danger-foreground"
-            >
-              <RefreshCw className="h-4 w-4 mr-2" />
-              Stop Camera
-            </Button>
+            <>
+              <Button
+                onClick={captureAndClassify}
+                disabled={isLoading}
+                className="flex-1 gradient-primary text-primary-foreground"
+              >
+                <Camera className="h-4 w-4 mr-2" />
+                Capture & Classify
+              </Button>
+              <Button
+                onClick={stopCamera}
+                variant="outline"
+                className="bg-sidebar-accent text-sidebar-foreground border-sidebar-border"
+              >
+                <RefreshCw className="h-4 w-4" />
+              </Button>
+            </>
           ) : (
             <Button
               onClick={startCamera}
-              disabled={isLoading || !!error}
+              disabled={isLoading}
               className="flex-1 gradient-primary text-primary-foreground"
             >
               <Camera className="h-4 w-4 mr-2" />
-              Start Camera
+              {isModelLoaded ? "Start Camera" : "Load Model & Start"}
             </Button>
           )}
 
@@ -303,42 +292,42 @@ export function TensorFlowVision({ onDetection }: TensorFlowVisionProps) {
         <div className="flex items-center justify-between mb-6">
           <div>
             <h3 className="font-display text-lg font-semibold text-foreground">
-              Real-time Detection
+              Image Classification
             </h3>
             <p className="text-sm text-muted-foreground">
-              TensorFlow.js COCO-SSD Model
+              Hugging Face Transformers (MobileNetV4)
             </p>
           </div>
-          <Badge variant={isStreaming ? "default" : "secondary"}>
-            {isStreaming ? "Live" : "Stopped"}
+          <Badge variant={isModelLoaded ? "default" : "secondary"}>
+            {isModelLoaded ? "Model Ready" : "Not Loaded"}
           </Badge>
         </div>
 
         {detections.length === 0 ? (
           <div className="text-center py-12 text-muted-foreground">
             <Camera className="h-12 w-12 mx-auto mb-4 opacity-50" />
-            <p>No objects detected yet</p>
-            <p className="text-sm">Point camera at objects to detect them</p>
+            <p>No classifications yet</p>
+            <p className="text-sm">Capture or upload an image to classify</p>
           </div>
         ) : (
           <div className="space-y-3 max-h-[400px] overflow-y-auto">
             {detections.map((detection, index) => (
               <div
-                key={`${detection.class}-${index}`}
+                key={`${detection.label}-${index}`}
                 className="flex items-center justify-between p-4 rounded-lg bg-muted/50 hover:bg-muted transition-colors animate-fade-in"
               >
                 <div className="flex items-center gap-3">
                   <div className="h-10 w-10 rounded-lg bg-primary/10 flex items-center justify-center">
                     <span className="text-primary font-bold text-sm">
-                      {detection.class.charAt(0).toUpperCase()}
+                      {index + 1}
                     </span>
                   </div>
                   <div>
                     <p className="font-medium text-foreground capitalize">
-                      {detection.class}
+                      {detection.label.split(",")[0]}
                     </p>
-                    <p className="text-sm text-muted-foreground">
-                      Object detected
+                    <p className="text-sm text-muted-foreground truncate max-w-[200px]">
+                      {detection.label}
                     </p>
                   </div>
                 </div>
@@ -355,8 +344,8 @@ export function TensorFlowVision({ onDetection }: TensorFlowVisionProps) {
 
         <div className="mt-6 p-4 bg-muted/30 rounded-lg">
           <p className="text-xs text-muted-foreground">
-            <strong>Model:</strong> COCO-SSD (MobileNet v2) • 
-            <strong> Objects:</strong> 80+ categories including bottles, cups, chairs, phones, etc.
+            <strong>Model:</strong> MobileNetV4 (ONNX) • 
+            <strong> Categories:</strong> 1000 ImageNet classes
           </p>
         </div>
       </div>
