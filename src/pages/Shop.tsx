@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area";
+import { BarcodeScanner } from "@/components/scanner/BarcodeScanner";
 import { 
   ShoppingCart, 
   Search, 
@@ -19,8 +20,10 @@ import {
   LogOut,
   ClipboardList,
   X,
+  ScanLine,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useToast } from "@/hooks/use-toast";
 
 interface Product {
   id: string;
@@ -61,6 +64,17 @@ export default function ShopPage() {
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
   const { items, addToCart, updateQuantity, totalItems, totalPrice } = useCart();
   const { user, signOut } = useAuth();
+  const { toast } = useToast();
+
+  const handleBarcodeProduct = (product: { id: string; name: string; price: number }) => {
+    if (shopId) {
+      addToCart(product.id, shopId);
+      toast({
+        title: "Added to cart",
+        description: product.name,
+      });
+    }
+  };
 
   useEffect(() => {
     if (shopId) {
@@ -220,14 +234,22 @@ export default function ShopPage() {
 
       {/* Search & Categories */}
       <div className="container mx-auto px-4 py-6 space-y-4">
-        <div className="relative max-w-md mx-auto">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
-          <Input
-            placeholder="Search products..."
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            className="pl-10 h-12 text-base"
-          />
+        <div className="flex gap-3 max-w-xl mx-auto">
+          <div className="relative flex-1">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
+            <Input
+              placeholder="Search products..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="pl-10 h-12 text-base"
+            />
+          </div>
+          {shopId && (
+            <BarcodeScanner 
+              shopId={shopId} 
+              onProductFound={handleBarcodeProduct}
+            />
+          )}
         </div>
 
         {/* Category Filters */}

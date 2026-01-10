@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import {
   LayoutDashboard,
@@ -14,6 +14,8 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/hooks/useAuth";
+import { OrderNotifications } from "@/components/notifications/OrderNotifications";
+import { supabase } from "@/integrations/supabase/client";
 
 const menuItems = [
   { icon: LayoutDashboard, label: "Dashboard", path: "/" },
@@ -27,9 +29,23 @@ const menuItems = [
 
 export function Sidebar() {
   const [collapsed, setCollapsed] = useState(false);
+  const [shopId, setShopId] = useState<string | null>(null);
   const location = useLocation();
   const navigate = useNavigate();
   const { user, signOut } = useAuth();
+
+  useEffect(() => {
+    const fetchShop = async () => {
+      if (!user) return;
+      const { data } = await supabase
+        .from("shops")
+        .select("id")
+        .eq("owner_id", user.id)
+        .single();
+      if (data) setShopId(data.id);
+    };
+    fetchShop();
+  }, [user]);
 
   const handleSignOut = async () => {
     await signOut();
@@ -61,17 +77,25 @@ export function Sidebar() {
               </div>
             )}
           </Link>
-          <button
-            onClick={() => setCollapsed(!collapsed)}
-            className="flex h-8 w-8 items-center justify-center rounded-lg text-sidebar-foreground/60 hover:bg-sidebar-accent hover:text-sidebar-foreground transition-colors"
-          >
-            <ChevronLeft
-              className={cn(
-                "h-4 w-4 transition-transform duration-300",
-                collapsed && "rotate-180"
-              )}
-            />
-          </button>
+          <div className="flex items-center gap-2">
+            {/* Notifications */}
+            {shopId && !collapsed && (
+              <div className="text-sidebar-foreground">
+                <OrderNotifications shopId={shopId} />
+              </div>
+            )}
+            <button
+              onClick={() => setCollapsed(!collapsed)}
+              className="flex h-8 w-8 items-center justify-center rounded-lg text-sidebar-foreground/60 hover:bg-sidebar-accent hover:text-sidebar-foreground transition-colors"
+            >
+              <ChevronLeft
+                className={cn(
+                  "h-4 w-4 transition-transform duration-300",
+                  collapsed && "rotate-180"
+                )}
+              />
+            </button>
+          </div>
         </div>
 
         {/* Navigation */}
