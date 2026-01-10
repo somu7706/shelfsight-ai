@@ -12,9 +12,11 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Search, Filter, Plus, Edit2, Trash2, Loader2, Package } from "lucide-react";
+import { Search, Filter, Plus, Edit2, Trash2, Loader2, Package, FolderOpen, BarChart3 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { ProductForm } from "./ProductForm";
+import { CategoryManager } from "./CategoryManager";
+import { StockAdjustment } from "./StockAdjustment";
 import { useToast } from "@/hooks/use-toast";
 import {
   AlertDialog,
@@ -57,8 +59,10 @@ export function InventoryTable() {
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
   const [isFormOpen, setIsFormOpen] = useState(false);
+  const [isCategoryOpen, setIsCategoryOpen] = useState(false);
   const [editProduct, setEditProduct] = useState<Product | null>(null);
   const [deleteProduct, setDeleteProduct] = useState<Product | null>(null);
+  const [stockProduct, setStockProduct] = useState<Product | null>(null);
   const { shopId } = useAuth();
   const { toast } = useToast();
 
@@ -179,7 +183,7 @@ export function InventoryTable() {
               {products.length} products • {products.filter(p => getStatus(p) === "low-stock").length} low stock
             </p>
           </div>
-          <div className="flex items-center gap-3 w-full sm:w-auto">
+          <div className="flex flex-wrap items-center gap-3 w-full sm:w-auto">
             <div className="relative flex-1 sm:flex-none">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
               <Input
@@ -189,8 +193,12 @@ export function InventoryTable() {
                 className="pl-9 w-full sm:w-64"
               />
             </div>
-            <Button variant="outline" size="icon">
-              <Filter className="h-4 w-4" />
+            <Button
+              variant="outline"
+              onClick={() => setIsCategoryOpen(true)}
+            >
+              <FolderOpen className="h-4 w-4 mr-2" />
+              Categories
             </Button>
             <Button
               className="gradient-primary text-primary-foreground"
@@ -286,12 +294,19 @@ export function InventoryTable() {
                       <TableCell className="text-right font-medium text-foreground">
                         ₹{product.price}
                       </TableCell>
-                      <TableCell className={cn(
-                        "text-right font-semibold",
-                        status === "low-stock" && "text-warning",
-                        status === "out-of-stock" && "text-danger"
-                      )}>
-                        {product.inventory?.quantity ?? 0}
+                      <TableCell>
+                        <Button
+                          variant="ghost"
+                          className={cn(
+                            "h-auto py-1 px-2 font-semibold",
+                            status === "low-stock" && "text-warning hover:text-warning",
+                            status === "out-of-stock" && "text-danger hover:text-danger"
+                          )}
+                          onClick={() => setStockProduct(product)}
+                        >
+                          {product.inventory?.quantity ?? 0}
+                          <BarChart3 className="h-3 w-3 ml-1" />
+                        </Button>
                       </TableCell>
                       <TableCell>
                         <Badge variant="outline" className={statusStyle.className}>
@@ -335,6 +350,18 @@ export function InventoryTable() {
         onOpenChange={setIsFormOpen}
         onSuccess={fetchProducts}
         editProduct={editProduct}
+      />
+
+      <CategoryManager
+        open={isCategoryOpen}
+        onOpenChange={setIsCategoryOpen}
+      />
+
+      <StockAdjustment
+        open={!!stockProduct}
+        onOpenChange={() => setStockProduct(null)}
+        product={stockProduct}
+        onSuccess={fetchProducts}
       />
 
       <AlertDialog open={!!deleteProduct} onOpenChange={() => setDeleteProduct(null)}>
