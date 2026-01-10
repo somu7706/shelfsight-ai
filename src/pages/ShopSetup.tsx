@@ -5,6 +5,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
+import { useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -26,9 +27,10 @@ type ShopFormData = z.infer<typeof shopSchema>;
 
 export default function ShopSetup() {
   const [isLoading, setIsLoading] = useState(false);
-  const { user } = useAuth();
+  const { user, refreshShopStatus } = useAuth();
   const navigate = useNavigate();
   const { toast } = useToast();
+  const queryClient = useQueryClient();
 
   const {
     register,
@@ -77,30 +79,19 @@ export default function ShopSetup() {
 
       if (shopError) throw shopError;
 
-      // Add owner role to user
-      const { error: roleError } = await supabase
-        .from("user_roles")
-        .upsert({
-          user_id: user.id,
-          role: "owner",
-        }, {
-          onConflict: "user_id,role"
-        });
-
-      if (roleError) {
-        console.error("Role error:", roleError);
-      }
-
       toast({
         title: "Shop created!",
         description: "Your shop is ready. Start adding products now.",
       });
 
+      // Refresh auth context to update shopId and hasShop
+      await refreshShopStatus();
+      
+      // Clear any cached queries
+      queryClient.clear();
+
       // Navigate to inventory to add products
       navigate("/inventory");
-      
-      // Force page reload to update auth context
-      window.location.reload();
     } catch (error: any) {
       console.error("Error creating shop:", error);
       toast({
