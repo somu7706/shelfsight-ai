@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { MainLayout } from "@/components/layout/MainLayout";
 import { Button } from "@/components/ui/button";
@@ -21,14 +21,88 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
-import { Store, Bell, Shield, CreditCard, Globe, Save, Trash2, AlertTriangle } from "lucide-react";
+import { Store, Bell, Shield, CreditCard, Globe, Save, Trash2, AlertTriangle, Archive, RotateCcw } from "lucide-react";
 
 export default function Settings() {
   const { shopId, isShopOwner, signOut, refreshShopStatus } = useAuth();
   const { toast } = useToast();
   const navigate = useNavigate();
   const [isDeleting, setIsDeleting] = useState(false);
+  const [isArchiving, setIsArchiving] = useState(false);
   const [confirmText, setConfirmText] = useState("");
+  const [isShopArchived, setIsShopArchived] = useState(false);
+
+  // Check if shop is archived
+  useEffect(() => {
+    const checkArchivedStatus = async () => {
+      if (!shopId) return;
+      const { data } = await supabase
+        .from("shops")
+        .select("is_archived")
+        .eq("id", shopId)
+        .maybeSingle();
+      if (data) {
+        setIsShopArchived(data.is_archived || false);
+      }
+    };
+    checkArchivedStatus();
+  }, [shopId]);
+
+  const handleArchiveShop = async () => {
+    if (!shopId || !isShopOwner) return;
+    
+    setIsArchiving(true);
+    try {
+      const { error } = await supabase
+        .from("shops")
+        .update({ is_archived: true, is_open: false })
+        .eq("id", shopId);
+
+      if (error) throw error;
+
+      setIsShopArchived(true);
+      toast({
+        title: "Shop deactivated",
+        description: "Your shop has been deactivated. Customers can no longer see it.",
+      });
+    } catch (error: any) {
+      toast({
+        title: "Error deactivating shop",
+        description: error.message,
+        variant: "destructive",
+      });
+    } finally {
+      setIsArchiving(false);
+    }
+  };
+
+  const handleReactivateShop = async () => {
+    if (!shopId || !isShopOwner) return;
+    
+    setIsArchiving(true);
+    try {
+      const { error } = await supabase
+        .from("shops")
+        .update({ is_archived: false, is_open: true })
+        .eq("id", shopId);
+
+      if (error) throw error;
+
+      setIsShopArchived(false);
+      toast({
+        title: "Shop reactivated",
+        description: "Your shop is now visible to customers again.",
+      });
+    } catch (error: any) {
+      toast({
+        title: "Error reactivating shop",
+        description: error.message,
+        variant: "destructive",
+      });
+    } finally {
+      setIsArchiving(false);
+    }
+  };
 
   const handleDeleteShop = async () => {
     if (!shopId || !isShopOwner) return;
@@ -168,67 +242,167 @@ export default function Settings() {
                     <h3 className="font-display text-lg font-semibold text-destructive">
                       Danger Zone
                     </h3>
-                    <p className="text-sm text-muted-foreground">Irreversible actions</p>
+                    <p className="text-sm text-muted-foreground">Shop management actions</p>
                   </div>
                 </div>
 
-                <div className="p-4 rounded-lg bg-destructive/5 border border-destructive/20">
-                  <div className="flex items-start justify-between gap-4">
-                    <div>
-                      <p className="font-medium text-foreground">Delete Shop</p>
-                      <p className="text-sm text-muted-foreground mt-1">
-                        Permanently delete your shop and all associated data including products, 
-                        orders, and customer information. This action cannot be undone.
-                      </p>
-                    </div>
-                    <AlertDialog>
-                      <AlertDialogTrigger asChild>
-                        <Button variant="destructive" size="sm">
-                          <Trash2 className="h-4 w-4 mr-2" />
-                          Delete Shop
-                        </Button>
-                      </AlertDialogTrigger>
-                      <AlertDialogContent>
-                        <AlertDialogHeader>
-                          <AlertDialogTitle className="flex items-center gap-2 text-destructive">
-                            <AlertTriangle className="h-5 w-5" />
-                            Delete Shop Permanently?
-                          </AlertDialogTitle>
-                          <AlertDialogDescription className="space-y-3">
-                            <p>
-                              This will permanently delete your shop and all associated data:
-                            </p>
-                            <ul className="list-disc list-inside text-sm space-y-1">
-                              <li>All products and inventory</li>
-                              <li>All orders and order history</li>
-                              <li>All customer data and loyalty points</li>
-                              <li>All categories and settings</li>
-                            </ul>
-                            <p className="font-medium text-foreground">
-                              Type "DELETE" to confirm:
-                            </p>
-                            <Input 
-                              value={confirmText}
-                              onChange={(e) => setConfirmText(e.target.value)}
-                              placeholder="Type DELETE to confirm"
-                              className="mt-2"
-                            />
-                          </AlertDialogDescription>
-                        </AlertDialogHeader>
-                        <AlertDialogFooter>
-                          <AlertDialogCancel onClick={() => setConfirmText("")}>
-                            Cancel
-                          </AlertDialogCancel>
-                          <AlertDialogAction
-                            onClick={handleDeleteShop}
-                            disabled={confirmText !== "DELETE" || isDeleting}
-                            className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                <div className="space-y-4">
+                  {/* Soft Delete / Archive Option */}
+                  <div className="p-4 rounded-lg bg-amber-500/5 border border-amber-500/20">
+                    <div className="flex items-start justify-between gap-4">
+                      <div>
+                        <p className="font-medium text-foreground flex items-center gap-2">
+                          {isShopArchived ? (
+                            <>
+                              <RotateCcw className="h-4 w-4 text-green-600" />
+                              Reactivate Shop
+                            </>
+                          ) : (
+                            <>
+                              <Archive className="h-4 w-4 text-amber-600" />
+                              Deactivate Shop
+                            </>
+                          )}
+                        </p>
+                        <p className="text-sm text-muted-foreground mt-1">
+                          {isShopArchived 
+                            ? "Your shop is currently deactivated and hidden from customers. Reactivate to make it visible again."
+                            : "Temporarily hide your shop from customers. Your data will be preserved and you can reactivate anytime."
+                          }
+                        </p>
+                      </div>
+                      <AlertDialog>
+                        <AlertDialogTrigger asChild>
+                          <Button 
+                            variant={isShopArchived ? "default" : "outline"} 
+                            size="sm"
+                            className={isShopArchived ? "bg-green-600 hover:bg-green-700" : "border-amber-500 text-amber-700 hover:bg-amber-50"}
                           >
-                            {isDeleting ? "Deleting..." : "Delete Shop Forever"}
-                          </AlertDialogAction>
-                        </AlertDialogFooter>
-                      </AlertDialogContent>
-                    </AlertDialog>
+                            {isShopArchived ? (
+                              <>
+                                <RotateCcw className="h-4 w-4 mr-2" />
+                                Reactivate
+                              </>
+                            ) : (
+                              <>
+                                <Archive className="h-4 w-4 mr-2" />
+                                Deactivate
+                              </>
+                            )}
+                          </Button>
+                        </AlertDialogTrigger>
+                        <AlertDialogContent>
+                          <AlertDialogHeader>
+                            <AlertDialogTitle className="flex items-center gap-2">
+                              {isShopArchived ? (
+                                <>
+                                  <RotateCcw className="h-5 w-5 text-green-600" />
+                                  Reactivate Your Shop?
+                                </>
+                              ) : (
+                                <>
+                                  <Archive className="h-5 w-5 text-amber-600" />
+                                  Deactivate Your Shop?
+                                </>
+                              )}
+                            </AlertDialogTitle>
+                            <AlertDialogDescription>
+                              {isShopArchived ? (
+                                <p>Your shop will become visible to customers again. All your products and data are still intact.</p>
+                              ) : (
+                                <div className="space-y-3">
+                                  <p>This will temporarily hide your shop from customers:</p>
+                                  <ul className="list-disc list-inside text-sm space-y-1">
+                                    <li>Customers won't be able to find or access your shop</li>
+                                    <li>All your data (products, orders, etc.) will be preserved</li>
+                                    <li>You can reactivate your shop anytime</li>
+                                  </ul>
+                                </div>
+                              )}
+                            </AlertDialogDescription>
+                          </AlertDialogHeader>
+                          <AlertDialogFooter>
+                            <AlertDialogCancel>Cancel</AlertDialogCancel>
+                            <AlertDialogAction
+                              onClick={isShopArchived ? handleReactivateShop : handleArchiveShop}
+                              disabled={isArchiving}
+                              className={isShopArchived ? "bg-green-600 hover:bg-green-700" : "bg-amber-600 hover:bg-amber-700"}
+                            >
+                              {isArchiving 
+                                ? "Processing..." 
+                                : isShopArchived 
+                                  ? "Reactivate Shop" 
+                                  : "Deactivate Shop"
+                              }
+                            </AlertDialogAction>
+                          </AlertDialogFooter>
+                        </AlertDialogContent>
+                      </AlertDialog>
+                    </div>
+                  </div>
+
+                  {/* Permanent Delete Option */}
+                  <div className="p-4 rounded-lg bg-destructive/5 border border-destructive/20">
+                    <div className="flex items-start justify-between gap-4">
+                      <div>
+                        <p className="font-medium text-foreground flex items-center gap-2">
+                          <Trash2 className="h-4 w-4 text-destructive" />
+                          Delete Shop Permanently
+                        </p>
+                        <p className="text-sm text-muted-foreground mt-1">
+                          Permanently delete your shop and all associated data including products, 
+                          orders, and customer information. This action cannot be undone.
+                        </p>
+                      </div>
+                      <AlertDialog>
+                        <AlertDialogTrigger asChild>
+                          <Button variant="destructive" size="sm">
+                            <Trash2 className="h-4 w-4 mr-2" />
+                            Delete
+                          </Button>
+                        </AlertDialogTrigger>
+                        <AlertDialogContent>
+                          <AlertDialogHeader>
+                            <AlertDialogTitle className="flex items-center gap-2 text-destructive">
+                              <AlertTriangle className="h-5 w-5" />
+                              Delete Shop Permanently?
+                            </AlertDialogTitle>
+                            <AlertDialogDescription className="space-y-3">
+                              <p>
+                                This will permanently delete your shop and all associated data:
+                              </p>
+                              <ul className="list-disc list-inside text-sm space-y-1">
+                                <li>All products and inventory</li>
+                                <li>All orders and order history</li>
+                                <li>All customer data and loyalty points</li>
+                                <li>All categories and settings</li>
+                              </ul>
+                              <p className="font-medium text-foreground">
+                                Type "DELETE" to confirm:
+                              </p>
+                              <Input 
+                                value={confirmText}
+                                onChange={(e) => setConfirmText(e.target.value)}
+                                placeholder="Type DELETE to confirm"
+                                className="mt-2"
+                              />
+                            </AlertDialogDescription>
+                          </AlertDialogHeader>
+                          <AlertDialogFooter>
+                            <AlertDialogCancel onClick={() => setConfirmText("")}>
+                              Cancel
+                            </AlertDialogCancel>
+                            <AlertDialogAction
+                              onClick={handleDeleteShop}
+                              disabled={confirmText !== "DELETE" || isDeleting}
+                              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                            >
+                              {isDeleting ? "Deleting..." : "Delete Shop Forever"}
+                            </AlertDialogAction>
+                          </AlertDialogFooter>
+                        </AlertDialogContent>
+                      </AlertDialog>
+                    </div>
                   </div>
                 </div>
               </div>
