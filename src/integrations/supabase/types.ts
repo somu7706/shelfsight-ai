@@ -129,6 +129,104 @@ export type Database = {
           },
         ]
       }
+      inventory_forecasts: {
+        Row: {
+          confidence_score: number | null
+          created_at: string
+          current_stock: number
+          daily_sales_avg: number
+          days_until_stockout: number | null
+          id: string
+          predicted_stockout_date: string | null
+          product_id: string
+          recommendation: string | null
+          shop_id: string
+          updated_at: string
+        }
+        Insert: {
+          confidence_score?: number | null
+          created_at?: string
+          current_stock: number
+          daily_sales_avg?: number
+          days_until_stockout?: number | null
+          id?: string
+          predicted_stockout_date?: string | null
+          product_id: string
+          recommendation?: string | null
+          shop_id: string
+          updated_at?: string
+        }
+        Update: {
+          confidence_score?: number | null
+          created_at?: string
+          current_stock?: number
+          daily_sales_avg?: number
+          days_until_stockout?: number | null
+          id?: string
+          predicted_stockout_date?: string | null
+          product_id?: string
+          recommendation?: string | null
+          shop_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "inventory_forecasts_product_id_fkey"
+            columns: ["product_id"]
+            isOneToOne: false
+            referencedRelation: "products"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "inventory_forecasts_shop_id_fkey"
+            columns: ["shop_id"]
+            isOneToOne: false
+            referencedRelation: "shops"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      loyalty_points: {
+        Row: {
+          balance: number
+          created_at: string
+          id: string
+          lifetime_points: number
+          shop_id: string
+          tier: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          balance?: number
+          created_at?: string
+          id?: string
+          lifetime_points?: number
+          shop_id: string
+          tier?: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          balance?: number
+          created_at?: string
+          id?: string
+          lifetime_points?: number
+          shop_id?: string
+          tier?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "loyalty_points_shop_id_fkey"
+            columns: ["shop_id"]
+            isOneToOne: false
+            referencedRelation: "shops"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       order_items: {
         Row: {
           created_at: string
@@ -223,6 +321,54 @@ export type Database = {
         Relationships: [
           {
             foreignKeyName: "orders_shop_id_fkey"
+            columns: ["shop_id"]
+            isOneToOne: false
+            referencedRelation: "shops"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      points_transactions: {
+        Row: {
+          created_at: string
+          description: string | null
+          id: string
+          order_id: string | null
+          points: number
+          shop_id: string
+          type: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          description?: string | null
+          id?: string
+          order_id?: string | null
+          points: number
+          shop_id: string
+          type: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          description?: string | null
+          id?: string
+          order_id?: string | null
+          points?: number
+          shop_id?: string
+          type?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "points_transactions_order_id_fkey"
+            columns: ["order_id"]
+            isOneToOne: false
+            referencedRelation: "orders"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "points_transactions_shop_id_fkey"
             columns: ["shop_id"]
             isOneToOne: false
             referencedRelation: "shops"
@@ -328,6 +474,86 @@ export type Database = {
           user_id?: string
         }
         Relationships: []
+      }
+      push_subscriptions: {
+        Row: {
+          auth: string
+          created_at: string
+          endpoint: string
+          id: string
+          p256dh: string
+          user_id: string
+        }
+        Insert: {
+          auth: string
+          created_at?: string
+          endpoint: string
+          id?: string
+          p256dh: string
+          user_id: string
+        }
+        Update: {
+          auth?: string
+          created_at?: string
+          endpoint?: string
+          id?: string
+          p256dh?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      rewards: {
+        Row: {
+          created_at: string
+          current_redemptions: number | null
+          description: string | null
+          discount_type: string
+          discount_value: number
+          expires_at: string | null
+          id: string
+          is_active: boolean
+          max_redemptions: number | null
+          name: string
+          points_required: number
+          shop_id: string
+        }
+        Insert: {
+          created_at?: string
+          current_redemptions?: number | null
+          description?: string | null
+          discount_type: string
+          discount_value: number
+          expires_at?: string | null
+          id?: string
+          is_active?: boolean
+          max_redemptions?: number | null
+          name: string
+          points_required: number
+          shop_id: string
+        }
+        Update: {
+          created_at?: string
+          current_redemptions?: number | null
+          description?: string | null
+          discount_type?: string
+          discount_value?: number
+          expires_at?: string | null
+          id?: string
+          is_active?: boolean
+          max_redemptions?: number | null
+          name?: string
+          points_required?: number
+          shop_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "rewards_shop_id_fkey"
+            columns: ["shop_id"]
+            isOneToOne: false
+            referencedRelation: "shops"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       shop_staff: {
         Row: {
