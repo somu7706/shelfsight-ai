@@ -594,7 +594,9 @@ export type Database = {
           id: string
           is_archived: boolean | null
           is_open: boolean | null
+          latitude: number | null
           logo_url: string | null
+          longitude: number | null
           name: string
           owner_id: string
           phone: string | null
@@ -609,7 +611,9 @@ export type Database = {
           id?: string
           is_archived?: boolean | null
           is_open?: boolean | null
+          latitude?: number | null
           logo_url?: string | null
+          longitude?: number | null
           name: string
           owner_id: string
           phone?: string | null
@@ -624,7 +628,9 @@ export type Database = {
           id?: string
           is_archived?: boolean | null
           is_open?: boolean | null
+          latitude?: number | null
           logo_url?: string | null
+          longitude?: number | null
           name?: string
           owner_id?: string
           phone?: string | null

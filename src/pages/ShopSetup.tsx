@@ -11,7 +11,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Store, Loader2, Phone, Mail, MapPin } from "lucide-react";
+import { Store, Loader2, Phone, Mail, MapPin, Navigation } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 
 const shopSchema = z.object({
@@ -27,6 +27,8 @@ type ShopFormData = z.infer<typeof shopSchema>;
 
 export default function ShopSetup() {
   const [isLoading, setIsLoading] = useState(false);
+  const [isGettingLocation, setIsGettingLocation] = useState(false);
+  const [location, setLocation] = useState<{ lat: number; lng: number } | null>(null);
   const { user, refreshShopStatus } = useAuth();
   const navigate = useNavigate();
   const { toast } = useToast();
@@ -47,6 +49,41 @@ export default function ShopSetup() {
       gst_number: "",
     },
   });
+
+  const getLocation = () => {
+    if (!navigator.geolocation) {
+      toast({
+        title: "Geolocation not supported",
+        description: "Your browser doesn't support location services.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setIsGettingLocation(true);
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        setLocation({
+          lat: position.coords.latitude,
+          lng: position.coords.longitude,
+        });
+        setIsGettingLocation(false);
+        toast({
+          title: "Location captured",
+          description: "Your shop location has been saved.",
+        });
+      },
+      (error) => {
+        setIsGettingLocation(false);
+        toast({
+          title: "Location error",
+          description: error.message || "Failed to get location. Please try again.",
+          variant: "destructive",
+        });
+      },
+      { enableHighAccuracy: true, timeout: 10000 }
+    );
+  };
 
   const onSubmit = async (data: ShopFormData) => {
     if (!user) {
@@ -73,6 +110,8 @@ export default function ShopSetup() {
           address: data.address || null,
           gst_number: data.gst_number || null,
           is_open: true,
+          latitude: location?.lat || null,
+          longitude: location?.lng || null,
         })
         .select()
         .single();
@@ -127,10 +166,10 @@ export default function ShopSetup() {
                 id="name"
                 {...register("name")}
                 placeholder="e.g., Rajesh Grocery Store"
-                className={errors.name ? "border-danger" : ""}
+                className={errors.name ? "border-destructive" : ""}
               />
               {errors.name && (
-                <p className="text-xs text-danger">{errors.name.message}</p>
+                <p className="text-xs text-destructive">{errors.name.message}</p>
               )}
             </div>
 
@@ -141,10 +180,10 @@ export default function ShopSetup() {
                 {...register("description")}
                 placeholder="Tell customers about your shop..."
                 rows={3}
-                className={errors.description ? "border-danger" : ""}
+                className={errors.description ? "border-destructive" : ""}
               />
               {errors.description && (
-                <p className="text-xs text-danger">{errors.description.message}</p>
+                <p className="text-xs text-destructive">{errors.description.message}</p>
               )}
             </div>
 
@@ -158,10 +197,10 @@ export default function ShopSetup() {
                   id="phone"
                   {...register("phone")}
                   placeholder="+91 98765 43210"
-                  className={errors.phone ? "border-danger" : ""}
+                  className={errors.phone ? "border-destructive" : ""}
                 />
                 {errors.phone && (
-                  <p className="text-xs text-danger">{errors.phone.message}</p>
+                  <p className="text-xs text-destructive">{errors.phone.message}</p>
                 )}
               </div>
 
@@ -175,10 +214,10 @@ export default function ShopSetup() {
                   type="email"
                   {...register("email")}
                   placeholder="shop@example.com"
-                  className={errors.email ? "border-danger" : ""}
+                  className={errors.email ? "border-destructive" : ""}
                 />
                 {errors.email && (
-                  <p className="text-xs text-danger">{errors.email.message}</p>
+                  <p className="text-xs text-destructive">{errors.email.message}</p>
                 )}
               </div>
             </div>
@@ -193,11 +232,45 @@ export default function ShopSetup() {
                 {...register("address")}
                 placeholder="Shop address..."
                 rows={2}
-                className={errors.address ? "border-danger" : ""}
+                className={errors.address ? "border-destructive" : ""}
               />
               {errors.address && (
-                <p className="text-xs text-danger">{errors.address.message}</p>
+                <p className="text-xs text-destructive">{errors.address.message}</p>
               )}
+            </div>
+
+            {/* Location Capture */}
+            <div className="space-y-2">
+              <Label>Shop Location (for nearby customers)</Label>
+              <div className="flex items-center gap-3">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={getLocation}
+                  disabled={isGettingLocation}
+                  className="flex-1"
+                >
+                  {isGettingLocation ? (
+                    <>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      Getting location...
+                    </>
+                  ) : (
+                    <>
+                      <Navigation className="mr-2 h-4 w-4" />
+                      {location ? "Update Location" : "Use Current Location"}
+                    </>
+                  )}
+                </Button>
+                {location && (
+                  <div className="text-sm text-muted-foreground bg-muted px-3 py-2 rounded-lg">
+                    📍 Location saved
+                  </div>
+                )}
+              </div>
+              <p className="text-xs text-muted-foreground">
+                This helps customers find your shop based on their location
+              </p>
             </div>
 
             <div className="space-y-2">
@@ -206,10 +279,10 @@ export default function ShopSetup() {
                 id="gst_number"
                 {...register("gst_number")}
                 placeholder="e.g., 22AAAAA0000A1Z5"
-                className={errors.gst_number ? "border-danger" : ""}
+                className={errors.gst_number ? "border-destructive" : ""}
               />
               {errors.gst_number && (
-                <p className="text-xs text-danger">{errors.gst_number.message}</p>
+                <p className="text-xs text-destructive">{errors.gst_number.message}</p>
               )}
             </div>
 

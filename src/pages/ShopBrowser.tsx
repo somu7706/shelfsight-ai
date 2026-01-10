@@ -17,8 +17,11 @@ import {
   Loader2,
   ArrowRight,
   ClipboardList,
+  Navigation,
+  MapPinOff,
 } from "lucide-react";
 import { useCart } from "@/hooks/useCart";
+import { useToast } from "@/hooks/use-toast";
 
 interface Shop {
   id: string;
@@ -28,35 +31,134 @@ interface Shop {
   phone: string | null;
   logo_url: string | null;
   is_open: boolean;
+  latitude: number | null;
+  longitude: number | null;
+  distance?: number;
 }
+
+// Haversine formula to calculate distance between two points
+const calculateDistance = (
+  lat1: number,
+  lon1: number,
+  lat2: number,
+  lon2: number
+): number => {
+  const R = 6371; // Earth's radius in km
+  const dLat = ((lat2 - lat1) * Math.PI) / 180;
+  const dLon = ((lon2 - lon1) * Math.PI) / 180;
+  const a =
+    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos((lat1 * Math.PI) / 180) *
+      Math.cos((lat2 * Math.PI) / 180) *
+      Math.sin(dLon / 2) *
+      Math.sin(dLon / 2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  return R * c;
+};
+
+const formatDistance = (km: number): string => {
+  if (km < 1) {
+    return `${Math.round(km * 1000)} m`;
+  }
+  return `${km.toFixed(1)} km`;
+};
 
 export default function ShopBrowser() {
   const [shops, setShops] = useState<Shop[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
+  const [userLocation, setUserLocation] = useState<{ lat: number; lng: number } | null>(null);
+  const [locationLoading, setLocationLoading] = useState(false);
+  const [locationError, setLocationError] = useState<string | null>(null);
   const { user, signOut } = useAuth();
   const { totalItems } = useCart();
+  const { toast } = useToast();
 
   useEffect(() => {
     fetchShops();
+    requestLocation();
   }, []);
+
+  useEffect(() => {
+    // Re-sort shops when user location changes
+    if (userLocation && shops.length > 0) {
+      sortShopsByDistance();
+    }
+  }, [userLocation]);
+
+  const requestLocation = () => {
+    if (!navigator.geolocation) {
+      setLocationError("Geolocation is not supported by your browser");
+      return;
+    }
+
+    setLocationLoading(true);
+    setLocationError(null);
+
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        setUserLocation({
+          lat: position.coords.latitude,
+          lng: position.coords.longitude,
+        });
+        setLocationLoading(false);
+      },
+      (error) => {
+        setLocationLoading(false);
+        if (error.code === error.PERMISSION_DENIED) {
+          setLocationError("Location access denied. Enable location to see nearby shops.");
+        } else {
+          setLocationError("Unable to get your location");
+        }
+      },
+      { enableHighAccuracy: true, timeout: 10000 }
+    );
+  };
 
   const fetchShops = async () => {
     try {
       const { data, error } = await supabase
         .from("shops")
-        .select("id, name, description, address, phone, logo_url, is_open")
+        .select("id, name, description, address, phone, logo_url, is_open, latitude, longitude")
         .eq("is_open", true)
         .order("name");
 
       if (error) throw error;
-      // Filter out archived shops (they won't be returned due to RLS, but double-check)
       setShops(data || []);
     } catch (error) {
       console.error("Error fetching shops:", error);
     } finally {
       setLoading(false);
     }
+  };
+
+  const sortShopsByDistance = () => {
+    if (!userLocation) return;
+
+    const shopsWithDistance = shops.map((shop) => {
+      if (shop.latitude && shop.longitude) {
+        const distance = calculateDistance(
+          userLocation.lat,
+          userLocation.lng,
+          shop.latitude,
+          shop.longitude
+        );
+        return { ...shop, distance };
+      }
+      return { ...shop, distance: undefined };
+    });
+
+    // Sort: shops with distance first (by distance), then shops without location
+    shopsWithDistance.sort((a, b) => {
+      if (a.distance !== undefined && b.distance !== undefined) {
+        return a.distance - b.distance;
+      }
+      if (a.distance !== undefined) return -1;
+      if (b.distance !== undefined) return 1;
+      return 0;
+    });
+
+    setShops(shopsWithDistance);
   };
 
   const filteredShops = shops.filter(
@@ -127,6 +229,31 @@ export default function ShopBrowser() {
               Browse products from your favorite local stores and get them
               delivered fresh.
             </p>
+            
+            {/* Location Status */}
+            <div className="flex items-center justify-center gap-2 mb-4">
+              {locationLoading ? (
+                <div className="flex items-center gap-2 text-sm text-muted-foreground bg-muted px-3 py-1.5 rounded-full">
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  Getting your location...
+                </div>
+              ) : userLocation ? (
+                <div className="flex items-center gap-2 text-sm text-success bg-success/10 px-3 py-1.5 rounded-full">
+                  <Navigation className="h-4 w-4" />
+                  Showing shops near you
+                </div>
+              ) : locationError ? (
+                <button
+                  onClick={requestLocation}
+                  className="flex items-center gap-2 text-sm text-amber-600 bg-amber-500/10 px-3 py-1.5 rounded-full hover:bg-amber-500/20 transition-colors"
+                >
+                  <MapPinOff className="h-4 w-4" />
+                  {locationError}
+                  <span className="underline ml-1">Retry</span>
+                </button>
+              ) : null}
+            </div>
+
             <div className="relative max-w-md mx-auto">
               <Search className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
               <Input
@@ -162,6 +289,7 @@ export default function ShopBrowser() {
               <p className="text-muted-foreground">
                 {filteredShops.length} shop{filteredShops.length !== 1 ? "s" : ""}{" "}
                 available
+                {userLocation && " • Sorted by distance"}
               </p>
             </div>
 
@@ -191,9 +319,16 @@ export default function ShopBrowser() {
                             <h3 className="font-display font-semibold text-lg group-hover:text-primary transition-colors line-clamp-1">
                               {shop.name}
                             </h3>
-                            <Badge className="bg-success/10 text-success border-success/20 flex-shrink-0">
-                              Open
-                            </Badge>
+                            <div className="flex flex-col items-end gap-1">
+                              <Badge className="bg-success/10 text-success border-success/20 flex-shrink-0">
+                                Open
+                              </Badge>
+                              {shop.distance !== undefined && (
+                                <span className="text-xs text-muted-foreground font-medium">
+                                  {formatDistance(shop.distance)}
+                                </span>
+                              )}
+                            </div>
                           </div>
 
                           {shop.description && (
