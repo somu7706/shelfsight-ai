@@ -9,9 +9,11 @@ interface AuthContextType {
   loading: boolean;
   isShopOwner: boolean;
   shopId: string | null;
+  hasShop: boolean;
   signUp: (email: string, password: string, fullName: string) => Promise<{ error: Error | null }>;
   signIn: (email: string, password: string) => Promise<{ error: Error | null }>;
   signOut: () => Promise<void>;
+  refreshShopStatus: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -22,6 +24,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true);
   const [isShopOwner, setIsShopOwner] = useState(false);
   const [shopId, setShopId] = useState<string | null>(null);
+  const [hasShop, setHasShop] = useState(false);
   const { toast } = useToast();
 
   useEffect(() => {
@@ -35,11 +38,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         // Defer role and shop checking
         if (session?.user) {
           setTimeout(() => {
-            checkUserRole(session.user.id);
+            checkUserShop(session.user.id);
           }, 0);
         } else {
           setIsShopOwner(false);
           setShopId(null);
+          setHasShop(false);
         }
       }
     );
@@ -51,38 +55,52 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setLoading(false);
       
       if (session?.user) {
-        checkUserRole(session.user.id);
+        checkUserShop(session.user.id);
       }
     });
 
     return () => subscription.unsubscribe();
   }, []);
 
-  const checkUserRole = async (userId: string) => {
+  const checkUserShop = async (userId: string) => {
     try {
-      // Check if user is a shop owner
-      const { data: roles } = await supabase
-        .from("user_roles")
-        .select("role")
-        .eq("user_id", userId);
+      // Check if user owns a shop
+      const { data: shops } = await supabase
+        .from("shops")
+        .select("id")
+        .eq("owner_id", userId)
+        .limit(1);
 
-      const hasOwnerRole = roles?.some((r) => r.role === "owner" || r.role === "staff");
-      setIsShopOwner(hasOwnerRole || false);
-
-      // Get shop if owner
-      if (hasOwnerRole) {
-        const { data: shops } = await supabase
-          .from("shops")
-          .select("id")
-          .eq("owner_id", userId)
+      if (shops && shops.length > 0) {
+        setShopId(shops[0].id);
+        setHasShop(true);
+        setIsShopOwner(true);
+      } else {
+        // Check if user is staff at a shop
+        const { data: staffShops } = await supabase
+          .from("shop_staff")
+          .select("shop_id")
+          .eq("user_id", userId)
           .limit(1);
 
-        if (shops && shops.length > 0) {
-          setShopId(shops[0].id);
+        if (staffShops && staffShops.length > 0) {
+          setShopId(staffShops[0].shop_id);
+          setHasShop(true);
+          setIsShopOwner(false);
+        } else {
+          setShopId(null);
+          setHasShop(false);
+          setIsShopOwner(false);
         }
       }
     } catch (error) {
-      console.error("Error checking user role:", error);
+      console.error("Error checking user shop:", error);
+    }
+  };
+
+  const refreshShopStatus = async () => {
+    if (user) {
+      await checkUserShop(user.id);
     }
   };
 
@@ -105,7 +123,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       toast({
         title: "Account created!",
-        description: "You can now sign in with your credentials.",
+        description: "You can now set up your shop.",
       });
 
       return { error: null };
@@ -134,6 +152,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setSession(null);
     setIsShopOwner(false);
     setShopId(null);
+    setHasShop(false);
   };
 
   return (
@@ -144,9 +163,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         loading,
         isShopOwner,
         shopId,
+        hasShop,
         signUp,
         signIn,
         signOut,
+        refreshShopStatus,
       }}
     >
       {children}
