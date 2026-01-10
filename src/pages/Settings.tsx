@@ -1,3 +1,5 @@
+import { useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { MainLayout } from "@/components/layout/MainLayout";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -5,9 +7,60 @@ import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { NotificationSettings } from "@/components/notifications/NotificationSettings";
 import { ProtectedRoute } from "@/components/auth/ProtectedRoute";
-import { Store, Bell, Shield, CreditCard, Globe, Save } from "lucide-react";
+import { useAuth } from "@/hooks/useAuth";
+import { supabase } from "@/integrations/supabase/client";
+import { useToast } from "@/hooks/use-toast";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
+import { Store, Bell, Shield, CreditCard, Globe, Save, Trash2, AlertTriangle } from "lucide-react";
 
 export default function Settings() {
+  const { shopId, isShopOwner, signOut, refreshShopStatus } = useAuth();
+  const { toast } = useToast();
+  const navigate = useNavigate();
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [confirmText, setConfirmText] = useState("");
+
+  const handleDeleteShop = async () => {
+    if (!shopId || !isShopOwner) return;
+    
+    setIsDeleting(true);
+    try {
+      const { error } = await supabase
+        .from("shops")
+        .delete()
+        .eq("id", shopId);
+
+      if (error) throw error;
+
+      toast({
+        title: "Shop deleted",
+        description: "Your shop has been permanently deleted.",
+      });
+
+      await refreshShopStatus();
+      navigate("/");
+    } catch (error: any) {
+      toast({
+        title: "Error deleting shop",
+        description: error.message,
+        variant: "destructive",
+      });
+    } finally {
+      setIsDeleting(false);
+      setConfirmText("");
+    }
+  };
+
   return (
     <ProtectedRoute>
       <MainLayout>
@@ -103,6 +156,83 @@ export default function Settings() {
                 </div>
               </div>
             </div>
+
+            {/* Danger Zone */}
+            {isShopOwner && shopId && (
+              <div className="p-6 rounded-xl bg-destructive/5 border border-destructive/20 shadow-card">
+                <div className="flex items-center gap-3 mb-6">
+                  <div className="h-10 w-10 rounded-xl bg-destructive/10 flex items-center justify-center">
+                    <AlertTriangle className="h-5 w-5 text-destructive" />
+                  </div>
+                  <div>
+                    <h3 className="font-display text-lg font-semibold text-destructive">
+                      Danger Zone
+                    </h3>
+                    <p className="text-sm text-muted-foreground">Irreversible actions</p>
+                  </div>
+                </div>
+
+                <div className="p-4 rounded-lg bg-destructive/5 border border-destructive/20">
+                  <div className="flex items-start justify-between gap-4">
+                    <div>
+                      <p className="font-medium text-foreground">Delete Shop</p>
+                      <p className="text-sm text-muted-foreground mt-1">
+                        Permanently delete your shop and all associated data including products, 
+                        orders, and customer information. This action cannot be undone.
+                      </p>
+                    </div>
+                    <AlertDialog>
+                      <AlertDialogTrigger asChild>
+                        <Button variant="destructive" size="sm">
+                          <Trash2 className="h-4 w-4 mr-2" />
+                          Delete Shop
+                        </Button>
+                      </AlertDialogTrigger>
+                      <AlertDialogContent>
+                        <AlertDialogHeader>
+                          <AlertDialogTitle className="flex items-center gap-2 text-destructive">
+                            <AlertTriangle className="h-5 w-5" />
+                            Delete Shop Permanently?
+                          </AlertDialogTitle>
+                          <AlertDialogDescription className="space-y-3">
+                            <p>
+                              This will permanently delete your shop and all associated data:
+                            </p>
+                            <ul className="list-disc list-inside text-sm space-y-1">
+                              <li>All products and inventory</li>
+                              <li>All orders and order history</li>
+                              <li>All customer data and loyalty points</li>
+                              <li>All categories and settings</li>
+                            </ul>
+                            <p className="font-medium text-foreground">
+                              Type "DELETE" to confirm:
+                            </p>
+                            <Input 
+                              value={confirmText}
+                              onChange={(e) => setConfirmText(e.target.value)}
+                              placeholder="Type DELETE to confirm"
+                              className="mt-2"
+                            />
+                          </AlertDialogDescription>
+                        </AlertDialogHeader>
+                        <AlertDialogFooter>
+                          <AlertDialogCancel onClick={() => setConfirmText("")}>
+                            Cancel
+                          </AlertDialogCancel>
+                          <AlertDialogAction
+                            onClick={handleDeleteShop}
+                            disabled={confirmText !== "DELETE" || isDeleting}
+                            className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                          >
+                            {isDeleting ? "Deleting..." : "Delete Shop Forever"}
+                          </AlertDialogAction>
+                        </AlertDialogFooter>
+                      </AlertDialogContent>
+                    </AlertDialog>
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
 
           {/* Sidebar */}
