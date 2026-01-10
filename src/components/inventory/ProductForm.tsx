@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -22,7 +22,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Loader2 } from "lucide-react";
+import { Loader2, Upload, X, Image as ImageIcon } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 
 const productSchema = z.object({
@@ -57,12 +57,17 @@ interface ProductFormProps {
     price: number;
     cost_price: number | null;
     category_id: string | null;
+    image_url?: string | null;
   } | null;
 }
 
 export function ProductForm({ open, onOpenChange, onSuccess, editProduct }: ProductFormProps) {
   const [isLoading, setIsLoading] = useState(false);
   const [categories, setCategories] = useState<Category[]>([]);
+  const [imageFile, setImageFile] = useState<File | null>(null);
+  const [imagePreview, setImagePreview] = useState<string | null>(null);
+  const [isUploading, setIsUploading] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const { shopId } = useAuth();
   const { toast } = useToast();
 
@@ -104,6 +109,8 @@ export function ProductForm({ open, onOpenChange, onSuccess, editProduct }: Prod
         cost_price: editProduct.cost_price || 0,
         category_id: editProduct.category_id || "",
       });
+      setImagePreview(editProduct.image_url || null);
+      setImageFile(null);
     } else {
       reset({
         name: "",
@@ -116,8 +123,10 @@ export function ProductForm({ open, onOpenChange, onSuccess, editProduct }: Prod
         initial_stock: 0,
         min_stock_level: 10,
       });
+      setImagePreview(null);
+      setImageFile(null);
     }
-  }, [editProduct, reset]);
+  }, [editProduct, reset, open]);
 
   const fetchCategories = async () => {
     if (!shopId) return;
@@ -128,6 +137,70 @@ export function ProductForm({ open, onOpenChange, onSuccess, editProduct }: Prod
       .eq("shop_id", shopId);
     
     setCategories(data || []);
+  };
+
+  const handleImageSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    // Validate file type
+    if (!file.type.startsWith("image/")) {
+      toast({
+        title: "Invalid file type",
+        description: "Please select an image file.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    // Validate file size (max 5MB)
+    if (file.size > 5 * 1024 * 1024) {
+      toast({
+        title: "File too large",
+        description: "Please select an image smaller than 5MB.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setImageFile(file);
+    setImagePreview(URL.createObjectURL(file));
+  };
+
+  const removeImage = () => {
+    setImageFile(null);
+    setImagePreview(null);
+    if (fileInputRef.current) {
+      fileInputRef.current.value = "";
+    }
+  };
+
+  const uploadImage = async (productId: string): Promise<string | null> => {
+    if (!imageFile) return editProduct?.image_url || null;
+
+    setIsUploading(true);
+    try {
+      const fileExt = imageFile.name.split(".").pop();
+      const fileName = `${productId}-${Date.now()}.${fileExt}`;
+      const filePath = `${shopId}/${fileName}`;
+
+      const { error: uploadError } = await supabase.storage
+        .from("product-images")
+        .upload(filePath, imageFile, { upsert: true });
+
+      if (uploadError) throw uploadError;
+
+      const { data: { publicUrl } } = supabase.storage
+        .from("product-images")
+        .getPublicUrl(filePath);
+
+      return publicUrl;
+    } catch (error) {
+      console.error("Error uploading image:", error);
+      throw error;
+    } finally {
+      setIsUploading(false);
+    }
   };
 
   const onSubmit = async (data: ProductFormData) => {
@@ -144,6 +217,14 @@ export function ProductForm({ open, onOpenChange, onSuccess, editProduct }: Prod
 
     try {
       if (editProduct) {
+        // Upload new image if selected
+        let imageUrl = editProduct.image_url;
+        if (imageFile) {
+          imageUrl = await uploadImage(editProduct.id);
+        } else if (!imagePreview) {
+          imageUrl = null; // Image was removed
+        }
+
         // Update existing product
         const { error } = await supabase
           .from("products")
@@ -155,6 +236,7 @@ export function ProductForm({ open, onOpenChange, onSuccess, editProduct }: Prod
             price: data.price,
             cost_price: data.cost_price || null,
             category_id: data.category_id || null,
+            image_url: imageUrl,
           })
           .eq("id", editProduct.id);
 
@@ -184,6 +266,15 @@ export function ProductForm({ open, onOpenChange, onSuccess, editProduct }: Prod
 
         if (productError) throw productError;
 
+        // Upload image if selected
+        if (imageFile && product) {
+          const imageUrl = await uploadImage(product.id);
+          await supabase
+            .from("products")
+            .update({ image_url: imageUrl })
+            .eq("id", product.id);
+        }
+
         // Create inventory record
         const { error: inventoryError } = await supabase
           .from("inventory")
@@ -204,6 +295,8 @@ export function ProductForm({ open, onOpenChange, onSuccess, editProduct }: Prod
       onSuccess();
       onOpenChange(false);
       reset();
+      setImageFile(null);
+      setImagePreview(null);
     } catch (error: any) {
       console.error("Error saving product:", error);
       toast({
@@ -231,6 +324,63 @@ export function ProductForm({ open, onOpenChange, onSuccess, editProduct }: Prod
         </DialogHeader>
 
         <form onSubmit={handleSubmit(onSubmit)} className="space-y-4 mt-4">
+          {/* Image Upload */}
+          <div className="space-y-2">
+            <Label>Product Image</Label>
+            <div className="flex items-center gap-4">
+              {imagePreview ? (
+                <div className="relative h-24 w-24 rounded-lg overflow-hidden border border-border">
+                  <img
+                    src={imagePreview}
+                    alt="Product preview"
+                    className="w-full h-full object-cover"
+                  />
+                  <button
+                    type="button"
+                    onClick={removeImage}
+                    className="absolute top-1 right-1 h-6 w-6 rounded-full bg-danger text-danger-foreground flex items-center justify-center hover:bg-danger/90"
+                  >
+                    <X className="h-4 w-4" />
+                  </button>
+                </div>
+              ) : (
+                <div
+                  onClick={() => fileInputRef.current?.click()}
+                  className="h-24 w-24 rounded-lg border-2 border-dashed border-border flex flex-col items-center justify-center cursor-pointer hover:border-primary hover:bg-primary/5 transition-colors"
+                >
+                  <ImageIcon className="h-8 w-8 text-muted-foreground mb-1" />
+                  <span className="text-xs text-muted-foreground">Add image</span>
+                </div>
+              )}
+              <div className="flex-1">
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept="image/*"
+                  onChange={handleImageSelect}
+                  className="hidden"
+                />
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => fileInputRef.current?.click()}
+                  disabled={isUploading}
+                >
+                  {isUploading ? (
+                    <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                  ) : (
+                    <Upload className="h-4 w-4 mr-2" />
+                  )}
+                  {imagePreview ? "Change Image" : "Upload Image"}
+                </Button>
+                <p className="text-xs text-muted-foreground mt-1">
+                  Max 5MB. JPG, PNG, or WebP.
+                </p>
+              </div>
+            </div>
+          </div>
+
           <div className="space-y-2">
             <Label htmlFor="name">Product Name *</Label>
             <Input
@@ -353,7 +503,7 @@ export function ProductForm({ open, onOpenChange, onSuccess, editProduct }: Prod
             <Button
               type="submit"
               className="gradient-primary"
-              disabled={isLoading}
+              disabled={isLoading || isUploading}
             >
               {isLoading ? (
                 <>
