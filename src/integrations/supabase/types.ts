@@ -592,6 +592,7 @@ export type Database = {
           email: string | null
           gst_number: string | null
           id: string
+          is_archived: boolean | null
           is_open: boolean | null
           logo_url: string | null
           name: string
@@ -606,6 +607,7 @@ export type Database = {
           email?: string | null
           gst_number?: string | null
           id?: string
+          is_archived?: boolean | null
           is_open?: boolean | null
           logo_url?: string | null
           name: string
@@ -620,6 +622,7 @@ export type Database = {
           email?: string | null
           gst_number?: string | null
           id?: string
+          is_archived?: boolean | null
           is_open?: boolean | null
           logo_url?: string | null
           name?: string
