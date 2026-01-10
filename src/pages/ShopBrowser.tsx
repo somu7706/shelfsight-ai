@@ -16,6 +16,7 @@ import {
   LogOut,
   Loader2,
   ArrowRight,
+  ClipboardList,
 } from "lucide-react";
 import { useCart } from "@/hooks/useCart";
 
@@ -86,6 +87,11 @@ export default function ShopBrowser() {
             <div className="flex items-center gap-3">
               {user ? (
                 <>
+                  <Link to="/my-orders">
+                    <Button variant="ghost" size="icon">
+                      <ClipboardList className="h-5 w-5" />
+                    </Button>
+                  </Link>
                   <Link to="/cart">
                     <Button variant="outline" className="relative">
                       <ShoppingCart className="h-5 w-5" />

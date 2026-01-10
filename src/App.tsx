@@ -17,6 +17,7 @@ import ShopSetup from "./pages/ShopSetup";
 import Shop from "./pages/Shop";
 import Cart from "./pages/Cart";
 import OrderSuccess from "./pages/OrderSuccess";
+import MyOrders from "./pages/MyOrders";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -42,6 +43,7 @@ const App = () => (
               <Route path="/shop-setup" element={<ShopSetup />} />
               <Route path="/shop/:shopId" element={<Shop />} />
               <Route path="/cart" element={<Cart />} />
+              <Route path="/my-orders" element={<MyOrders />} />
               <Route path="/order-success" element={<OrderSuccess />} />
               <Route path="*" element={<NotFound />} />
             </Routes>
