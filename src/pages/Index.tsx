@@ -1,22 +1,10 @@
-import { useEffect } from "react";
-import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
 import Dashboard from "./Dashboard";
+import ShopBrowser from "./ShopBrowser";
 import { Loader2 } from "lucide-react";
 
 const Index = () => {
-  const { user, loading, hasShop } = useAuth();
-  const navigate = useNavigate();
-
-  useEffect(() => {
-    if (!loading) {
-      if (!user) {
-        navigate("/auth");
-      } else if (!hasShop) {
-        navigate("/shop-setup");
-      }
-    }
-  }, [user, loading, hasShop, navigate]);
+  const { user, loading, hasShop, isShopOwner } = useAuth();
 
   if (loading) {
     return (
@@ -29,11 +17,13 @@ const Index = () => {
     );
   }
 
-  if (!user || !hasShop) {
-    return null;
+  // If user is a shop owner with a shop, show dashboard
+  if (user && hasShop && isShopOwner) {
+    return <Dashboard />;
   }
 
-  return <Dashboard />;
+  // For everyone else (customers, non-logged in users), show shop browser
+  return <ShopBrowser />;
 };
 
 export default Index;
