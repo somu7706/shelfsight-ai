@@ -1,5 +1,5 @@
 import { MainLayout } from "@/components/layout/MainLayout";
-import { VisionScanner } from "@/components/vision/VisionScanner";
+import { TensorFlowVision } from "@/components/vision/TensorFlowVision";
 import { Camera, Zap, Target, Shield } from "lucide-react";
 
 const features = [
@@ -63,7 +63,7 @@ export default function Vision() {
       </div>
 
       {/* Scanner */}
-      <VisionScanner />
+      <TensorFlowVision />
     </MainLayout>
   );
 }
