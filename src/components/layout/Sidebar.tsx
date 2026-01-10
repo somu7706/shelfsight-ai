@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Link, useLocation } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import {
   LayoutDashboard,
   Package,
@@ -13,6 +13,7 @@ import {
   Store,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useAuth } from "@/hooks/useAuth";
 
 const menuItems = [
   { icon: LayoutDashboard, label: "Dashboard", path: "/" },
@@ -27,6 +28,15 @@ const menuItems = [
 export function Sidebar() {
   const [collapsed, setCollapsed] = useState(false);
   const location = useLocation();
+  const navigate = useNavigate();
+  const { user, signOut } = useAuth();
+
+  const handleSignOut = async () => {
+    await signOut();
+    navigate("/auth");
+  };
+
+  const userInitials = user?.email?.slice(0, 2).toUpperCase() || "U";
 
   return (
     <aside
@@ -90,26 +100,42 @@ export function Sidebar() {
 
         {/* User section */}
         <div className="border-t border-sidebar-border p-4">
-          <div className={cn("flex items-center gap-3", collapsed && "justify-center")}>
-            <div className="h-10 w-10 rounded-full bg-sidebar-accent flex items-center justify-center flex-shrink-0">
-              <span className="text-sm font-semibold text-sidebar-foreground">RS</span>
-            </div>
-            {!collapsed && (
-              <div className="flex-1 min-w-0 animate-fade-in">
-                <p className="text-sm font-medium text-sidebar-foreground truncate">
-                  Rajesh Store
-                </p>
-                <p className="text-xs text-sidebar-foreground/60 truncate">
-                  Premium Plan
-                </p>
+          {user ? (
+            <div className={cn("flex items-center gap-3", collapsed && "justify-center")}>
+              <div className="h-10 w-10 rounded-full bg-sidebar-accent flex items-center justify-center flex-shrink-0">
+                <span className="text-sm font-semibold text-sidebar-foreground">{userInitials}</span>
               </div>
-            )}
-            {!collapsed && (
-              <button className="text-sidebar-foreground/60 hover:text-sidebar-foreground transition-colors">
-                <LogOut className="h-4 w-4" />
-              </button>
-            )}
-          </div>
+              {!collapsed && (
+                <div className="flex-1 min-w-0 animate-fade-in">
+                  <p className="text-sm font-medium text-sidebar-foreground truncate">
+                    {user.email}
+                  </p>
+                  <p className="text-xs text-sidebar-foreground/60 truncate">
+                    Shop Owner
+                  </p>
+                </div>
+              )}
+              {!collapsed && (
+                <button
+                  onClick={handleSignOut}
+                  className="text-sidebar-foreground/60 hover:text-sidebar-foreground transition-colors"
+                >
+                  <LogOut className="h-4 w-4" />
+                </button>
+              )}
+            </div>
+          ) : (
+            <Link
+              to="/auth"
+              className={cn(
+                "flex items-center gap-3 text-sidebar-foreground hover:text-sidebar-primary transition-colors",
+                collapsed && "justify-center"
+              )}
+            >
+              <LogOut className="h-5 w-5" />
+              {!collapsed && <span className="font-medium">Sign In</span>}
+            </Link>
+          )}
         </div>
       </div>
     </aside>
