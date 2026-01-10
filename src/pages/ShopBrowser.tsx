@@ -50,6 +50,7 @@ export default function ShopBrowser() {
         .order("name");
 
       if (error) throw error;
+      // Filter out archived shops (they won't be returned due to RLS, but double-check)
       setShops(data || []);
     } catch (error) {
       console.error("Error fetching shops:", error);

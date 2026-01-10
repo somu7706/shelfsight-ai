@@ -1,10 +1,35 @@
+import { useEffect } from "react";
+import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
+import { supabase } from "@/integrations/supabase/client";
 import Dashboard from "./Dashboard";
 import ShopBrowser from "./ShopBrowser";
 import { Loader2 } from "lucide-react";
 
 const Index = () => {
   const { user, loading, hasShop, isShopOwner } = useAuth();
+  const navigate = useNavigate();
+
+  useEffect(() => {
+    const checkOwnerWithoutShop = async () => {
+      if (!user || loading) return;
+      
+      // If user is owner without shop, redirect to shop setup
+      if (!hasShop) {
+        const { data: roleData } = await supabase
+          .from("user_roles")
+          .select("role")
+          .eq("user_id", user.id);
+        
+        const isOwner = roleData?.some(r => r.role === "owner");
+        if (isOwner) {
+          navigate("/shop-setup");
+        }
+      }
+    };
+    
+    checkOwnerWithoutShop();
+  }, [user, loading, hasShop, navigate]);
 
   if (loading) {
     return (
