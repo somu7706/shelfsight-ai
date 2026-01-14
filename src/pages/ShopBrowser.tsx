@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { Button } from "@/components/ui/button";
@@ -19,6 +19,7 @@ import {
   ClipboardList,
   Navigation,
   MapPinOff,
+  Shield,
 } from "lucide-react";
 import { useCart } from "@/hooks/useCart";
 import { useToast } from "@/hooks/use-toast";
@@ -70,9 +71,19 @@ export default function ShopBrowser() {
   const [userLocation, setUserLocation] = useState<{ lat: number; lng: number } | null>(null);
   const [locationLoading, setLocationLoading] = useState(false);
   const [locationError, setLocationError] = useState<string | null>(null);
-  const { user, signOut } = useAuth();
+  const { user, signOut, isAdmin } = useAuth();
   const { totalItems } = useCart();
   const { toast } = useToast();
+  const navigate = useNavigate();
+
+  const handleSignOut = async () => {
+    await signOut();
+    navigate("/");
+    toast({
+      title: "Signed out",
+      description: "You have been successfully signed out.",
+    });
+  };
 
   useEffect(() => {
     fetchShops();
@@ -190,6 +201,13 @@ export default function ShopBrowser() {
             <div className="flex items-center gap-3">
               {user ? (
                 <>
+                  {isAdmin && (
+                    <Link to="/admin">
+                      <Button variant="outline" size="icon" className="border-destructive/50 text-destructive hover:bg-destructive/10">
+                        <Shield className="h-5 w-5" />
+                      </Button>
+                    </Link>
+                  )}
                   <Link to="/my-orders">
                     <Button variant="ghost" size="icon">
                       <ClipboardList className="h-5 w-5" />
@@ -205,7 +223,7 @@ export default function ShopBrowser() {
                       )}
                     </Button>
                   </Link>
-                  <Button variant="ghost" size="icon" onClick={signOut}>
+                  <Button variant="ghost" size="icon" onClick={handleSignOut}>
                     <LogOut className="h-5 w-5" />
                   </Button>
                 </>

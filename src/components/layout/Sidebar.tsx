@@ -49,7 +49,7 @@ export function Sidebar() {
 
   const handleSignOut = async () => {
     await signOut();
-    navigate("/auth");
+    navigate("/");
   };
 
   const userInitials = user?.email?.slice(0, 2).toUpperCase() || "U";
