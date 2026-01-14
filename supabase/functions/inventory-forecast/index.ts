@@ -21,7 +21,17 @@ serve(async (req) => {
       });
     }
 
+    // Verify authentication
+    const authHeader = req.headers.get("Authorization");
+    if (!authHeader?.startsWith("Bearer ")) {
+      return new Response(JSON.stringify({ error: "Unauthorized - missing auth token" }), {
+        status: 401,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+    const supabaseAnonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
     const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const lovableApiKey = Deno.env.get("LOVABLE_API_KEY");
 
@@ -32,7 +42,64 @@ serve(async (req) => {
       });
     }
 
-    const supabase = createClient(supabaseUrl, supabaseServiceKey);
+    // Create client with user's auth token for verification
+    const supabaseAuth = createClient(supabaseUrl, supabaseAnonKey, {
+      global: { headers: { Authorization: authHeader } },
+    });
+
+    // Verify the JWT and get user ID
+    const token = authHeader.replace("Bearer ", "");
+    const { data: claimsData, error: claimsError } = await supabaseAuth.auth.getClaims(token);
+
+    if (claimsError || !claimsData?.claims) {
+      console.error("JWT verification failed:", claimsError);
+      return new Response(JSON.stringify({ error: "Unauthorized - invalid token" }), {
+        status: 401,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    const userId = claimsData.claims.sub;
+    console.log("Authenticated user:", userId, "requesting forecast for shop:", shopId);
+
+    // Use service role client for authorization check (to bypass RLS and check ownership)
+    const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey);
+
+    // Verify user can manage this shop (is owner or staff)
+    const { data: shopOwner } = await supabaseAdmin
+      .from("shops")
+      .select("owner_id")
+      .eq("id", shopId)
+      .maybeSingle();
+
+    const { data: isStaff } = await supabaseAdmin
+      .from("shop_staff")
+      .select("id")
+      .eq("shop_id", shopId)
+      .eq("user_id", userId)
+      .maybeSingle();
+
+    const { data: isAdmin } = await supabaseAdmin
+      .from("user_roles")
+      .select("id")
+      .eq("user_id", userId)
+      .eq("role", "admin")
+      .maybeSingle();
+
+    const canAccess = shopOwner?.owner_id === userId || !!isStaff || !!isAdmin;
+
+    if (!canAccess) {
+      console.warn("Access denied: user", userId, "cannot manage shop", shopId);
+      return new Response(JSON.stringify({ error: "Forbidden - you don't have permission to access this shop's forecasts" }), {
+        status: 403,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    console.log("Authorization verified for user:", userId);
+
+    // Use service role client for data operations
+    const supabase = supabaseAdmin;
 
     // Fetch products with inventory
     const { data: products, error: productsError } = await supabase
