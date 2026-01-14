@@ -29,24 +29,77 @@ export default function Settings() {
   const navigate = useNavigate();
   const [isDeleting, setIsDeleting] = useState(false);
   const [isArchiving, setIsArchiving] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
   const [confirmText, setConfirmText] = useState("");
   const [isShopArchived, setIsShopArchived] = useState(false);
+  
+  // Form state for shop settings
+  const [storeName, setStoreName] = useState("");
+  const [phone, setPhone] = useState("");
+  const [address, setAddress] = useState("");
+  const [gstNumber, setGstNumber] = useState("");
+  const [email, setEmail] = useState("");
 
-  // Check if shop is archived
+  // Load shop data on mount
   useEffect(() => {
-    const checkArchivedStatus = async () => {
+    const loadShopData = async () => {
       if (!shopId) return;
       const { data } = await supabase
         .from("shops")
-        .select("is_archived")
+        .select("name, phone, address, gst_number, email, is_archived")
         .eq("id", shopId)
         .maybeSingle();
       if (data) {
+        setStoreName(data.name || "");
+        setPhone(data.phone || "");
+        setAddress(data.address || "");
+        setGstNumber(data.gst_number || "");
+        setEmail(data.email || "");
         setIsShopArchived(data.is_archived || false);
       }
     };
-    checkArchivedStatus();
+    loadShopData();
   }, [shopId]);
+
+  const handleSaveChanges = async () => {
+    if (!shopId || !isShopOwner) {
+      toast({
+        title: "Permission denied",
+        description: "Only shop owners can update settings.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setIsSaving(true);
+    try {
+      const { error } = await supabase
+        .from("shops")
+        .update({
+          name: storeName,
+          phone: phone,
+          address: address,
+          gst_number: gstNumber,
+          email: email,
+        })
+        .eq("id", shopId);
+
+      if (error) throw error;
+
+      toast({
+        title: "Settings saved",
+        description: "Your store settings have been updated successfully.",
+      });
+    } catch (error: any) {
+      toast({
+        title: "Error saving settings",
+        description: error.message,
+        variant: "destructive",
+      });
+    } finally {
+      setIsSaving(false);
+    }
+  };
 
   const handleArchiveShop = async () => {
     if (!shopId || !isShopOwner) return;
@@ -168,23 +221,44 @@ export default function Settings() {
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <Label htmlFor="storeName">Store Name</Label>
-                  <Input id="storeName" defaultValue="Rajesh General Store" />
+                  <Input 
+                    id="storeName" 
+                    value={storeName}
+                    onChange={(e) => setStoreName(e.target.value)}
+                  />
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="phone">Phone Number</Label>
-                  <Input id="phone" defaultValue="+91 98765 43210" />
+                  <Input 
+                    id="phone" 
+                    value={phone}
+                    onChange={(e) => setPhone(e.target.value)}
+                  />
                 </div>
                 <div className="space-y-2 md:col-span-2">
                   <Label htmlFor="address">Address</Label>
-                  <Input id="address" defaultValue="123, Market Street, Sector 15, Gurugram" />
+                  <Input 
+                    id="address" 
+                    value={address}
+                    onChange={(e) => setAddress(e.target.value)}
+                  />
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="gst">GST Number</Label>
-                  <Input id="gst" defaultValue="07AABCU9603R1ZM" />
+                  <Input 
+                    id="gst" 
+                    value={gstNumber}
+                    onChange={(e) => setGstNumber(e.target.value)}
+                  />
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="email">Email</Label>
-                  <Input id="email" type="email" defaultValue="rajesh.store@email.com" />
+                  <Input 
+                    id="email" 
+                    type="email" 
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                  />
                 </div>
               </div>
             </div>
@@ -456,9 +530,13 @@ export default function Settings() {
 
         {/* Save Button */}
         <div className="flex justify-end mt-8">
-          <Button className="gradient-primary text-primary-foreground">
+          <Button 
+            className="gradient-primary text-primary-foreground"
+            onClick={handleSaveChanges}
+            disabled={isSaving}
+          >
             <Save className="h-4 w-4 mr-2" />
-            Save Changes
+            {isSaving ? "Saving..." : "Save Changes"}
           </Button>
         </div>
       </MainLayout>
