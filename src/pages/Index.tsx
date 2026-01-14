@@ -7,7 +7,7 @@ import ShopBrowser from "./ShopBrowser";
 import { Loader2 } from "lucide-react";
 
 const Index = () => {
-  const { user, loading, hasShop, isShopOwner } = useAuth();
+  const { user, loading, hasShop, isShopOwner, isAdmin, userRole } = useAuth();
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -15,21 +15,13 @@ const Index = () => {
       if (!user || loading) return;
       
       // If user is owner without shop, redirect to shop setup
-      if (!hasShop) {
-        const { data: roleData } = await supabase
-          .from("user_roles")
-          .select("role")
-          .eq("user_id", user.id);
-        
-        const isOwner = roleData?.some(r => r.role === "owner");
-        if (isOwner) {
-          navigate("/shop-setup");
-        }
+      if (!hasShop && userRole === "owner") {
+        navigate("/shop-setup");
       }
     };
     
     checkOwnerWithoutShop();
-  }, [user, loading, hasShop, navigate]);
+  }, [user, loading, hasShop, userRole, navigate]);
 
   if (loading) {
     return (
@@ -42,12 +34,15 @@ const Index = () => {
     );
   }
 
+  // If user is admin, they can see the dashboard (if they have a shop) or shop browser
+  // Admins have a separate /admin route for admin panel
+
   // If user is a shop owner with a shop, show dashboard
   if (user && hasShop && isShopOwner) {
     return <Dashboard />;
   }
 
-  // For everyone else (customers, non-logged in users), show shop browser
+  // For everyone else (customers, admins without shops, non-logged in users), show shop browser
   return <ShopBrowser />;
 };
 

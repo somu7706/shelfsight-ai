@@ -3,17 +3,22 @@ import { User, Session } from "@supabase/supabase-js";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 
+type AppRole = "admin" | "owner" | "staff" | "customer";
+
 interface AuthContextType {
   user: User | null;
   session: Session | null;
   loading: boolean;
   isShopOwner: boolean;
+  isAdmin: boolean;
+  userRole: AppRole | null;
   shopId: string | null;
   hasShop: boolean;
   signUp: (email: string, password: string, fullName: string) => Promise<{ error: Error | null }>;
   signIn: (email: string, password: string) => Promise<{ error: Error | null }>;
   signOut: () => Promise<void>;
   refreshShopStatus: () => Promise<void>;
+  refreshUserRole: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -23,6 +28,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<Session | null>(null);
   const [loading, setLoading] = useState(true);
   const [isShopOwner, setIsShopOwner] = useState(false);
+  const [isAdmin, setIsAdmin] = useState(false);
+  const [userRole, setUserRole] = useState<AppRole | null>(null);
   const [shopId, setShopId] = useState<string | null>(null);
   const [hasShop, setHasShop] = useState(false);
   const { toast } = useToast();
@@ -39,9 +46,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         if (session?.user) {
           setTimeout(() => {
             checkUserShop(session.user.id);
+            checkUserRole(session.user.id);
           }, 0);
         } else {
           setIsShopOwner(false);
+          setIsAdmin(false);
+          setUserRole(null);
           setShopId(null);
           setHasShop(false);
         }
@@ -56,11 +66,43 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       
       if (session?.user) {
         checkUserShop(session.user.id);
+        checkUserRole(session.user.id);
       }
     });
 
     return () => subscription.unsubscribe();
   }, []);
+
+  const checkUserRole = async (userId: string) => {
+    try {
+      const { data: roles } = await supabase
+        .from("user_roles")
+        .select("role")
+        .eq("user_id", userId);
+
+      if (roles && roles.length > 0) {
+        // Prioritize admin > owner > staff > customer
+        if (roles.some(r => r.role === "admin")) {
+          setIsAdmin(true);
+          setUserRole("admin");
+        } else if (roles.some(r => r.role === "owner")) {
+          setIsAdmin(false);
+          setUserRole("owner");
+        } else if (roles.some(r => r.role === "staff")) {
+          setIsAdmin(false);
+          setUserRole("staff");
+        } else {
+          setIsAdmin(false);
+          setUserRole("customer");
+        }
+      } else {
+        setIsAdmin(false);
+        setUserRole("customer");
+      }
+    } catch (error) {
+      console.error("Error checking user role:", error);
+    }
+  };
 
   const checkUserShop = async (userId: string) => {
     try {
@@ -101,6 +143,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const refreshShopStatus = async () => {
     if (user) {
       await checkUserShop(user.id);
+    }
+  };
+
+  const refreshUserRole = async () => {
+    if (user) {
+      await checkUserRole(user.id);
     }
   };
 
@@ -151,6 +199,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setUser(null);
     setSession(null);
     setIsShopOwner(false);
+    setIsAdmin(false);
+    setUserRole(null);
     setShopId(null);
     setHasShop(false);
   };
@@ -162,12 +212,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         session,
         loading,
         isShopOwner,
+        isAdmin,
+        userRole,
         shopId,
         hasShop,
         signUp,
         signIn,
         signOut,
         refreshShopStatus,
+        refreshUserRole,
       }}
     >
       {children}
