@@ -103,9 +103,9 @@ export default function ShopPage() {
 
       setCategories(categoriesData || []);
 
-      // Fetch products with inventory and category
+      // Fetch products from secure public view (excludes cost_price)
       const { data: productsData, error: productsError } = await supabase
-        .from("products")
+        .from("products_public")
         .select(`
           id,
           name,
@@ -113,24 +113,20 @@ export default function ShopPage() {
           price,
           image_url,
           category_id,
-          shop_id,
-          inventory (
-            quantity,
-            min_stock_level
-          ),
-          categories:category_id (
-            name
-          )
+          shop_id
         `)
-        .eq("shop_id", shopId)
-        .eq("is_active", true);
+        .eq("shop_id", shopId);
 
       if (productsError) throw productsError;
 
-      const formattedProducts = productsData?.map((p) => ({
-        ...p,
-        category: p.categories as { name: string } | null,
-      })) || [];
+      // Map category names from already-fetched categories
+      const formattedProducts = productsData?.map((p) => {
+        const categoryInfo = (categoriesData || []).find(c => c.id === p.category_id);
+        return {
+          ...p,
+          category: categoryInfo ? { name: categoryInfo.name } : null,
+        };
+      }) || [];
 
       setProducts(formattedProducts);
     } catch (error) {
